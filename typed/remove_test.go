@@ -1097,6 +1097,92 @@ var extractWithKeysCases = []extractWithKeysTestCase{{
 			},
 		},
 	},
+}, {
+	name:         "atomicStructures",
+	rootTypeName: "myRoot",
+	schema:       typed.YAMLObject(associativeAndAtomicSchema),
+	triplets: []extractTriplet{
+		{
+			// extract from atomic list should return entire list
+			object: `{"atomicList":["a", "b", "c"]}`,
+			set: _NS(
+				_P("atomicList", _V("b")),
+			),
+			wantOutput: typed.YAMLObject(`{"atomicList":["a", "b", "c"]}`),
+		},
+		{
+			// extract from atomic map should return entire map
+			object: `{"atomicMap":{"key1": "value1", "key2": "value2"}}`,
+			set: _NS(
+				_P("atomicMap", "key1"),
+			),
+			wantOutput: typed.YAMLObject(`{"atomicMap":{"key1": "value1", "key2": "value2"}}`),
+		},
+		{
+			// extract with both atomic and associative structures
+			object: `{"list":[{"key":"nginx","id":1,"nv":2}], "atomicList":["x", "y"]}`,
+			set: _NS(
+				_P("list", _KBF("key", "nginx", "id", 1), "nv"),
+				_P("atomicList", _V("x")),
+			),
+			wantOutput: typed.YAMLObject(`{"list":[{"key":"nginx","id":1, "nv":2}], "atomicList":["x", "y"]}`),
+		},
+	},
+}, {
+	name:         "compositeKeysExtraction",
+	rootTypeName: "myRoot",
+	schema:       typed.YAMLObject(associativeAndAtomicSchema),
+	triplets: []extractTriplet{
+		{
+			// extract with composite keys - partial field extraction
+			object: `{"list":[{"key":"a","id":1,"nv":2,"bv":true},{"key":"a","id":2,"nv":3}]}`,
+			set: _NS(
+				_P("list", _KBF("key", "a", "id", 1), "nv"),
+			),
+			wantOutput: typed.YAMLObject(`{"list":[{"key":"a","id":1,"nv":2}]}`),
+		},
+		{
+			// This test case specifically catches the bug where WithAppendKeyFields
+			// would duplicate items when extracting with both item key and field paths
+			object: `{"list":[{"key":"nginx","id":1,"nv":2,"bv":true},{"key":"apache","id":2,"nv":3}]}`,
+			set: _NS(
+				_P("list", _KBF("key", "nginx", "id", 1)),
+				_P("list", _KBF("key", "nginx", "id", 1), "nv"),
+			),
+			wantOutput: typed.YAMLObject(`{"list":[{"key":"nginx","id":1,"nv":2}]}`),
+		},
+		{
+			// extract multiple items with composite keys
+			object: `{"list":[{"key":"a","id":1,"nv":2},{"key":"a","id":2,"nv":3},{"key":"b","id":1,"nv":4}]}`,
+			set: _NS(
+				_P("list", _KBF("key", "a", "id", 1)),
+				_P("list", _KBF("key", "b", "id", 1)),
+			),
+			wantOutput: typed.YAMLObject(`{"list":[{"key":"a","id":1},{"key":"b","id":1}]}`),
+		},
+	},
+}, {
+	name:         "nestedListsPartialExtraction",
+	rootTypeName: "type",
+	schema:       typed.YAMLObject(nestedTypesSchema),
+	triplets: []extractTriplet{
+		{
+			// extract single field from nested list
+			object: `{"listOfMaps":[{"name":"a","value":{"x":"1","y":"2"}},{"name":"b","value":{"z":"3"}}]}`,
+			set: _NS(
+				_P("listOfMaps", _KBF("name", "a"), "value", "x"),
+			),
+			wantOutput: typed.YAMLObject(`{"listOfMaps":[{"name":"a","value":{"x":"1"}}]}`),
+		},
+		{
+			// extract from deeply nested structure
+			object: `{"mapOfMapsRecursive":{"a":{"b":{"c":null,"d":{"e":null}}}}}`,
+			set: _NS(
+				_P("mapOfMapsRecursive", "a", "b", "c"),
+			),
+			wantOutput: typed.YAMLObject(`{"mapOfMapsRecursive":{"a":{"b":{"c":null}}}}`),
+		},
+	},
 }}
 
 func (tt extractWithKeysTestCase) test(t *testing.T) {
